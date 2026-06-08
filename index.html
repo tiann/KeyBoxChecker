@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none';" />
+    <title>KeyBox Checker</title>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Pure frontend · Offline trust snapshot</p>
+        <h1>KeyBox Checker</h1>
+        <p>A privacy-first Android keybox.xml checker. Files are parsed only in browser memory, never uploaded, and no external network requests are made at runtime.</p>
+        <div class="privacy-note">
+          <strong>How it works</strong>
+          <p>The page keeps the XML, private keys, and certificate chains on your device. Certificate parsing, private-key matching, and chain signature checks run locally; trusted roots and revocation data come from the offline snapshot bundled into this page.</p>
+        </div>
+      </section>
+
+      <section id="drop-zone" class="drop-zone" tabindex="0">
+        <input id="file-input" type="file" accept=".xml,application/xml,text/xml" />
+        <div>
+          <strong>Drop keybox.xml here</strong>
+          <p>Or click to choose a file. UTF-8 and UTF-16 are supported. Recommended file size: under 512 KiB.</p>
+        </div>
+      </section>
+
+      <section class="toolbar hidden" id="toolbar">
+        <button id="copy-json" type="button">Copy JSON</button>
+        <button id="copy-text" type="button">Copy text report</button>
+        <button id="clear" type="button" class="secondary">Clear</button>
+      </section>
+
+      <section id="result" class="result" aria-live="polite"></section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
