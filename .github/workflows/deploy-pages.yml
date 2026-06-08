@@ -1,6 +1,9 @@
 name: Deploy to GitHub Pages
 
 on:
+  schedule:
+    # Refresh bundled revocation/root data and publish a new single-file page every hour.
+    - cron: "0 * * * *"
   push:
     branches: [main]
   workflow_dispatch:
@@ -28,6 +31,9 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Refresh bundled keybox revocation data
+        run: bun run update-trust-data
 
       - name: Test
         run: bun test
