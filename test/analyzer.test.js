@@ -66,7 +66,13 @@ function toUtf16LeWithBom(text) {
   return concatBytes(Uint8Array.of(0xff, 0xfe), new Uint8Array(Buffer.from(text, "utf16le")));
 }
 
-async function makeSyntheticKeyboxXml() {
+function makeName(cn, organization) {
+  const attributes = [derSet(derSeq(derOid("2.5.4.3"), derUtf8(cn)))];
+  if (organization) attributes.push(derSet(derSeq(derOid("2.5.4.10"), derUtf8(organization))));
+  return derSeq(...attributes);
+}
+
+async function makeSyntheticKeyboxXml({ rootCn = "KeyBox Checker Test Root", organization } = {}) {
   const keyPair = await crypto.subtle.generateKey(
     {
       name: "RSASSA-PKCS1-v1_5",
@@ -80,7 +86,7 @@ async function makeSyntheticKeyboxXml() {
   const spki = new Uint8Array(await crypto.subtle.exportKey("spki", keyPair.publicKey));
   const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
   const sigAlg = derSeq(derOid("1.2.840.113549.1.1.11"), derNull());
-  const name = derSeq(derSet(derSeq(derOid("2.5.4.3"), derUtf8("KeyBox Checker Test Root"))));
+  const name = makeName(rootCn, organization);
   const validity = derSeq(derUtc("250101000000Z"), derUtc("350101000000Z"));
   const tbs = derSeq(
     derContext(0, derInt(2)),
@@ -131,7 +137,7 @@ test("analyzes a generated keybox locally without external fixtures", async () =
     version: "test",
     fetchedAt: "2026-06-08T00:00:00Z",
     status: { entries: {} },
-    roots: [{ id: "test-root", label: "Test root", kind: "test", level: "trusted", pem: certPem }],
+    roots: [{ id: "test-google-root", label: "Test Google hardware root", kind: "google_hardware", level: "trusted", pem: certPem }],
   };
   const result = await analyzeKeybox(xml, trustData, new Date("2026-06-08T10:00:00Z"));
   const key = result.keyboxes[0].keys[0];
@@ -140,4 +146,27 @@ test("analyzes a generated keybox locally without external fixtures", async () =
   assert.equal(key.chain.valid, true);
   assert.equal(key.root.recognized, true);
   assert.equal(key.revocation.hits.length, 0);
+});
+
+
+test("marks non-production Google hardware roots as Unknown Signer warnings", async () => {
+  const { xml } = await makeSyntheticKeyboxXml({
+    rootCn: "AOSP Test Attestation Root",
+    organization: "Android Open Source Project",
+  });
+  const trustData = {
+    version: "test",
+    fetchedAt: "2026-06-08T00:00:00Z",
+    status: { entries: {} },
+    roots: [],
+  };
+  const result = await analyzeKeybox(xml, trustData, new Date("2026-06-08T10:00:00Z"));
+  const key = result.keyboxes[0].keys[0];
+  assert.equal(result.overall, "warn");
+  assert.equal(key.status, "warn");
+  assert.equal(key.root.recognized, false);
+  assert.equal(key.root.id, "unknown_signer");
+  assert.equal(key.root.label, "Unknown Signer");
+  assert.equal(key.chain.valid, true);
+  assert.equal(key.privateKey.matchesLeafCertificate, true);
 });

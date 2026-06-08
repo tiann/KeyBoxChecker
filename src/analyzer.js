@@ -384,6 +384,29 @@ function certPublicView(cert) {
   };
 }
 
+function classifyRoot(rootCert, trustRoots) {
+  const exactProductionGoogle = trustRoots.find(
+    r => r.kind === "google_hardware" && r.level === "trusted" && bytesEqual(r.spkiDer, rootCert.spkiDer),
+  );
+  if (exactProductionGoogle) {
+    return {
+      recognized: true,
+      id: exactProductionGoogle.id,
+      label: exactProductionGoogle.label,
+      kind: exactProductionGoogle.kind,
+      level: exactProductionGoogle.level,
+    };
+  }
+
+  return {
+    recognized: false,
+    id: "unknown_signer",
+    label: "Unknown Signer",
+    kind: "unknown",
+    level: "unknown",
+  };
+}
+
 function worse(a, b) {
   const order = { pass: 0, warn: 1, fail: 2, error: 3 };
   return order[b] > order[a] ? b : a;
@@ -471,9 +494,11 @@ export async function analyzeKeybox(xmlText, trustData, now = new Date()) {
         if (!chainValid) keyOut.status = worse(keyOut.status, "fail");
 
         const rootCert = certs.at(-1);
-        const root = trustRoots.find(r => bytesEqual(r.spkiDer, rootCert.spkiDer));
-        if (root) keyOut.root = { recognized: true, id: root.id, label: root.label, kind: root.kind, level: root.level };
-        else keyOut.status = worse(keyOut.status, "fail");
+        keyOut.root = classifyRoot(rootCert, trustRoots);
+        if (!keyOut.root.recognized) {
+          keyOut.status = worse(keyOut.status, "warn");
+          keyOut.warnings.push("Signer is not a production Google hardware attestation root.");
+        }
 
         for (const cert of certs) {
           const hit = statusEntries[cert.serialHex.toLowerCase()];
