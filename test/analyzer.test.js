@@ -170,3 +170,19 @@ test("marks non-production Google hardware roots as Unknown Signer warnings", as
   assert.equal(key.chain.valid, true);
   assert.equal(key.privateKey.matchesLeafCertificate, true);
 });
+
+
+test("accepts PEM with missing base64 padding", async () => {
+  const { xml, certPem } = await makeSyntheticKeyboxXml();
+  const unpaddedXml = xml.replace(/=+(?=\n-----END)/g, "");
+  const unpaddedCertPem = certPem.replace(/=+(?=\n-----END)/g, "");
+  const trustData = {
+    version: "test",
+    fetchedAt: "2026-06-08T00:00:00Z",
+    status: { entries: {} },
+    roots: [{ id: "test-google-root", label: "Test Google hardware root", kind: "google_hardware", level: "trusted", pem: unpaddedCertPem }],
+  };
+  const result = await analyzeKeybox(unpaddedXml, trustData, new Date("2026-06-08T10:00:00Z"));
+  assert.equal(result.overall, "pass");
+  assert.equal(result.keyboxes[0].keys[0].errors.length, 0);
+});

@@ -50,7 +50,12 @@ export function decodeKeyboxBytes(bytes) {
 }
 
 function decodeEntities(s) {
-  return (s || "").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const named = { quot: '"', apos: "'", lt: "<", gt: ">", amp: "&" };
+  return (s || "").replace(/&(?:#(\d+)|#x([0-9a-fA-F]+)|(quot|apos|lt|gt|amp));/g, (m, dec, hexValue, name) => {
+    if (name) return named[name];
+    const value = Number.parseInt(dec || hexValue, dec ? 10 : 16);
+    try { return String.fromCodePoint(value); } catch { return m; }
+  });
 }
 
 function attr(attrs, name) {
@@ -92,14 +97,28 @@ export function parseKeyboxXml(xmlText) {
   return { declaredKeyboxCount: Number.parseInt(firstText(xml, "NumberOfKeyboxes") || `${keyboxes.length}`, 10), keyboxes };
 }
 
+function base64ToBytes(value, context = "base64") {
+  let b64 = decodeEntities(value).replace(/[\s\ufeff]+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+  if (b64.length % 4 === 1) throw new Error(`Invalid ${context}: base64 length is not valid`);
+  const invalid = b64.match(/[^A-Za-z0-9+/=]/);
+  if (invalid) throw new Error(`Invalid ${context}: unexpected character ${JSON.stringify(invalid[0])}`);
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) throw new Error(`Invalid ${context}: padding is not valid`);
+  b64 = b64.replace(/=+$/, "");
+  b64 += "=".repeat((4 - (b64.length % 4)) % 4);
+  try {
+    if (typeof atob === "function") return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    return Uint8Array.from(Buffer.from(b64, "base64"));
+  } catch (error) {
+    throw new Error(`Invalid ${context}: ${(error instanceof Error && error.message) || String(error)}`);
+  }
+}
+
 function pemToDer(pem, label) {
   const escaped = label ? label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : "[A-Z0-9 ]+";
   const re = new RegExp(`-----BEGIN ${escaped}-----([\\s\\S]*?)-----END ${escaped}-----`, "i");
   const m = pem.match(re) || pem.match(/-----BEGIN [^-]+-----([\s\S]*?)-----END [^-]+-----/i);
   if (!m) throw new Error(`Invalid PEM${label ? ` (${label})` : ""}`);
-  const b64 = m[1].replace(/\s+/g, "");
-  if (typeof atob === "function") return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-  return Uint8Array.from(Buffer.from(b64, "base64"));
+  return base64ToBytes(m[1], `PEM${label ? ` ${label}` : ""}`);
 }
 
 function concatBytes(...parts) {
