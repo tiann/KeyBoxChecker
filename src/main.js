@@ -49,7 +49,7 @@ function render(result) {
               </div>`).join("")}
           </div>
           <h4>Checks</h4>
-          <ul>${key.chain.checks.map(c => `<li>${c.status === "pass" ? "✅" : "❌"} ${escapeHtml(c.message)}</li>`).join("")}</ul>
+          <ul>${key.chain.checks.map(c => `<li>${c.status === "pass" ? "✅" : c.status === "warn" ? "⚠️" : "❌"} ${escapeHtml(c.message)}</li>`).join("")}</ul>
           ${key.revocation.hits.length ? `<h4>Revocation hits</h4><pre>${escapeHtml(JSON.stringify(key.revocation.hits, null, 2))}</pre>` : ""}
         </section>`).join("")}
     </article>`).join("");

@@ -483,6 +483,9 @@ export async function analyzeKeybox(xmlText, trustData, now = new Date()) {
         keyOut.privateKey.status = keyOut.privateKey.matchesLeafCertificate ? "pass" : "fail";
         if (!keyOut.privateKey.matchesLeafCertificate) keyOut.status = worse(keyOut.status, "fail");
 
+        const rootCert = certs.at(-1);
+        keyOut.root = classifyRoot(rootCert, trustRoots);
+
         const timeChecks = certs.map((cert, idx) => {
           const role = idx === 0 ? "leaf" : idx === certs.length - 1 ? "root" : "intermediate";
           const nb = new Date(cert.notBefore);
@@ -490,11 +493,20 @@ export async function analyzeKeybox(xmlText, trustData, now = new Date()) {
           let status = "pass";
           let message = `Certificate #${idx + 1} (${role}) within validity period`;
           if (now < nb) { status = "fail"; message = `Certificate #${idx + 1} (${role}) not yet valid`; }
-          if (now > na) { status = "fail"; message = `Certificate #${idx + 1} (${role}) expired`; }
+          if (now > na) {
+            const warnOnly = role === "root" && keyOut.root.recognized;
+            status = warnOnly ? "warn" : "fail";
+            message = `Certificate #${idx + 1} (${role}) expired${warnOnly ? ", but verifiers may ignore that" : ""}`;
+          }
           return { status, message, serialHex: cert.serialHex };
         });
         keyOut.chain.checks.push(...timeChecks);
         if (timeChecks.some(c => c.status === "fail")) keyOut.status = worse(keyOut.status, "fail");
+        const expiredRoot = timeChecks.find(c => c.status === "warn");
+        if (expiredRoot) {
+          keyOut.status = worse(keyOut.status, "warn");
+          keyOut.warnings.push(expiredRoot.message);
+        }
 
         let chainValid = true;
         for (let i = 0; i < certs.length - 1; i++) {
@@ -512,8 +524,6 @@ export async function analyzeKeybox(xmlText, trustData, now = new Date()) {
         keyOut.chain.valid = chainValid;
         if (!chainValid) keyOut.status = worse(keyOut.status, "fail");
 
-        const rootCert = certs.at(-1);
-        keyOut.root = classifyRoot(rootCert, trustRoots);
         if (!keyOut.root.recognized) {
           keyOut.status = worse(keyOut.status, "warn");
           keyOut.warnings.push("Signer is not a production Google hardware attestation root.");
